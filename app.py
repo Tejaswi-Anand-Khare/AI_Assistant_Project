@@ -2,106 +2,117 @@ import streamlit as st
 import random
 import datetime
 import requests
-from deep_translator import GoogleTranslator
 import re
 import wikipediaapi
+from deep_translator import GoogleTranslator
 
 # ------------------------
-# Wikipedia
+# PAGE CONFIG (Dark style)
 # ------------------------
-wiki = wikipediaapi.Wikipedia('english')
+st.set_page_config(page_title="Atlas AI", page_icon="🤖", layout="centered")
 
-def fetch_wikipedia_summary(query, max_sentences=2):
+# ------------------------
+# WIKIPEDIA
+# ------------------------
+wiki = wikipediaapi.Wikipedia(
+    user_agent="AtlasAI/1.0",
+    language="en"
+)
+
+def fetch_wikipedia_summary(query):
     page = wiki.page(query)
     if page.exists():
-        summary = page.summary.split('. ')[:max_sentences]
-        return '. '.join(summary) + "."
-    return "Sorry, I couldn't find it."
+        return page.summary[:400]
+    return "No Wikipedia result found."
 
 # ------------------------
-# APIs
+# TOOLS
 # ------------------------
 def fetch_word_meaning(word):
-    url = f'https://api.dictionaryapi.dev/api/v2/entries/en/{word}'
-    response = requests.get(url)
-    data = response.json()
+    url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
+    data = requests.get(url).json()
     if isinstance(data, list):
-        meanings = data[0]['meanings']
-        definition = [m['definitions'][0]['definition'] for m in meanings]
-        return " ".join(definition)
+        return data[0]["meanings"][0]["definitions"][0]["definition"]
     return "Meaning not found."
 
-def translate_text(text, dest_language):
+def translate_text(text, lang):
     try:
-        return GoogleTranslator(source='auto', target=dest_language).translate(text)
+        return GoogleTranslator(source='auto', target=lang).translate(text)
     except:
-        return "Translation failed. Check language name."
-
-def fetch_weather(location):
-    api_key = "YOUR_API_KEY"
-    url = f"https://api.openweathermap.org/data/2.5/weather?q={location}&appid={api_key}&units=metric"
-    data = requests.get(url).json()
-
-    if data.get("cod") == 200:
-        weather = data["weather"][0]["description"]
-        temp = data["main"]["temp"]
-        return f"{location}: {weather}, {temp}°C"
-    return "Weather not found."
+        return "Translation failed."
 
 # ------------------------
-# Intents
-# ------------------------
-intents = {
-    "greeting": ["hello","hi","hey"],
-    "time": ["time"],
-    "date": ["date"],
-    "joke": ["joke"],
-}
-
-responses = {
-    "greeting": ["Hi there!", "Hello!", "Hey!"],
-    "time": ["Current time: " + datetime.datetime.now().strftime("%I:%M %p")],
-    "date": ["Today is " + datetime.datetime.now().strftime("%d %B %Y")],
-    "joke": ["Why don’t scientists trust atoms? Because they make up everything!"]
-}
-
-# ------------------------
-# MAIN AI LOGIC
+# AI LOGIC
 # ------------------------
 def process_command(command):
     command = command.lower()
 
-    meaning_match = re.search(r'meaning of (\w+)', command)
-    if meaning_match:
-        return fetch_word_meaning(meaning_match.group(1))
+    meaning = re.search(r"meaning of (\w+)", command)
+    if meaning:
+        return fetch_word_meaning(meaning.group(1))
 
-    translate_match = re.search(r'translate (.+) to (\w+)', command)
-    if translate_match:
-        text = translate_match.group(1)
-        lang = translate_match.group(2)
-        return translate_text(text, lang)
+    translate = re.search(r"translate (.+) to (\w+)", command)
+    if translate:
+        return translate_text(translate.group(1), translate.group(2))
 
-    weather_match = re.search(r'weather in (\w+)', command)
-    if weather_match:
-        return fetch_weather(weather_match.group(1))
+    if "time" in command:
+        return datetime.datetime.now().strftime("%I:%M %p")
+
+    if "date" in command:
+        return datetime.datetime.now().strftime("%d %B %Y")
+
+    if "joke" in command:
+        return random.choice([
+            "Why don’t scientists trust atoms? Because they make up everything!",
+            "I told my computer I needed a break, it said no problem — it will go to sleep."
+        ])
 
     if "wikipedia" in command:
-        query = command.replace("wikipedia","").strip()
+        query = command.replace("wikipedia", "")
         return fetch_wikipedia_summary(query)
 
-    for intent, keywords in intents.items():
-        if any(k in command for k in keywords):
-            return random.choice(responses[intent])
-
-    return "Sorry, I didn't understand."
+    return "I didn't understand that yet."
 
 # ------------------------
-# STREAMLIT UI (LIVE PART)
+# CHAT MEMORY
 # ------------------------
-st.title("Quagmire AI Assistant 🤖")
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-user_input = st.text_input("Ask Quagmire something:")
+st.title("🤖 Atlas AI Assistant")
 
-if user_input:
-    response = process_command(user_input)
-    st.write("**Quagmire:**", response)
+# ------------------------
+# SHOW CHAT HISTORY
+# ------------------------
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+# ------------------------
+# USER INPUT
+# ------------------------
+if prompt := st.chat_input("Ask Atlas anything..."):
+
+    # show user
+    st.session_state.messages.append({"role": "user", "content": prompt})
+
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    # AI response
+    response = process_command(prompt)
+
+    st.session_state.messages.append(
+        {"role": "assistant", "content": response}
+    )
+
+    with st.chat_message("assistant"):
+        st.markdown(response)
+
+        # -------- Browser TTS ----------
+        st.components.v1.html(f"""
+        <script>
+        var msg = new SpeechSynthesisUtterance("{response}");
+        window.speechSynthesis.speak(msg);
+        </script>
+        """, height=0)
