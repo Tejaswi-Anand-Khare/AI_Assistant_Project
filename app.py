@@ -7,7 +7,7 @@ from streamlit_mic_recorder import mic_recorder
 # PAGE CONFIG
 # --------------------------------
 st.set_page_config(
-    page_title="Albus Dumbledore",
+    page_title="Voldemort",
     page_icon="🤖",
     layout="centered"
 )
@@ -62,7 +62,7 @@ def ask_llm(prompt):
         model="llama-3.1-8b-instant",
         messages=[
             {"role": "system",
-             "content": "You are Albus Dumbledore, a helpful AI assistant."},
+             "content": "You are Voldemort, a helpful AI assistant."},
             {"role": "user", "content": prompt}
         ],
         stream=True
@@ -71,7 +71,7 @@ def ask_llm(prompt):
 # --------------------------------
 # UI TITLE
 # --------------------------------
-st.title("🤖 Albus Dumbledore")
+st.title("🤖 Voldemort")
 
 # --------------------------------
 # SHOW CHAT HISTORY
@@ -126,7 +126,7 @@ if audio:
 # --------------------------------
 # USER INPUT
 # --------------------------------
-if prompt := st.chat_input("Ask Albus Dumbledore anything..."):
+if prompt := st.chat_input("Ask Voldemort anything..."):
 
     # USER MESSAGE
     st.session_state.messages.append(
