@@ -1,4 +1,3 @@
 streamlit
-requests
-deep-translator
-wikipedia-api
+openai
+streamlit-mic-recorder
