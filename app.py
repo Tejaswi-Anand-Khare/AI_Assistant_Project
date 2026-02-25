@@ -2,7 +2,7 @@ import streamlit as st
 import random
 import datetime
 import requests
-from googletrans import Translator, LANGUAGES
+from deep_translator import GoogleTranslator
 import re
 import wikipediaapi
 
@@ -32,8 +32,10 @@ def fetch_word_meaning(word):
     return "Meaning not found."
 
 def translate_text(text, dest_language):
-    translator = Translator()
-    return translator.translate(text, dest=dest_language).text
+    try:
+        return GoogleTranslator(source='auto', target=dest_language).translate(text)
+    except:
+        return "Translation failed. Check language name."
 
 def fetch_weather(location):
     api_key = "YOUR_API_KEY"
