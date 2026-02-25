@@ -1,25 +1,25 @@
 import streamlit as st
 import sqlite3
-from openai import OpenAI
+from groq import Groq
 from streamlit_mic_recorder import mic_recorder
 
-# -----------------------------
+# --------------------------------
 # PAGE CONFIG
-# -----------------------------
+# --------------------------------
 st.set_page_config(
     page_title="Atlas AI",
     page_icon="🤖",
     layout="centered"
 )
 
-# -----------------------------
-# OPENAI CLIENT
-# -----------------------------
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+# --------------------------------
+# GROQ CLIENT (LLAMA ONLINE)
+# --------------------------------
+client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# -----------------------------
+# --------------------------------
 # DATABASE (PERSISTENT MEMORY)
-# -----------------------------
+# --------------------------------
 conn = sqlite3.connect("memory.db", check_same_thread=False)
 c = conn.cursor()
 
@@ -32,21 +32,21 @@ content TEXT
 """)
 conn.commit()
 
-# -----------------------------
-# LOAD CHAT HISTORY
-# -----------------------------
+# --------------------------------
+# LOAD HISTORY
+# --------------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
     rows = c.execute("SELECT role, content FROM chats").fetchall()
+
     for role, content in rows:
         st.session_state.messages.append(
             {"role": role, "content": content}
         )
 
-# -----------------------------
-# SAVE MESSAGE FUNCTION
-# -----------------------------
+# --------------------------------
+# SAVE FUNCTION
+# --------------------------------
 def save_message(role, content):
     c.execute(
         "INSERT INTO chats (role, content) VALUES (?,?)",
@@ -54,12 +54,13 @@ def save_message(role, content):
     )
     conn.commit()
 
-# -----------------------------
-# LLM STREAMING FUNCTION
-# -----------------------------
+# --------------------------------
+# STREAMING LLM
+# --------------------------------
 def ask_llm(prompt):
+
     return client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="llama3-8b-8192",
         messages=[
             {"role": "system",
              "content": "You are Atlas, a helpful AI assistant."},
@@ -68,33 +69,33 @@ def ask_llm(prompt):
         stream=True
     )
 
-# -----------------------------
+# --------------------------------
 # UI TITLE
-# -----------------------------
+# --------------------------------
 st.title("🤖 Atlas AI Assistant")
 
-# -----------------------------
-# DISPLAY CHAT HISTORY
-# -----------------------------
+# --------------------------------
+# SHOW CHAT HISTORY
+# --------------------------------
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# -----------------------------
-# VOICE INPUT
-# -----------------------------
+# --------------------------------
+# VOICE INPUT BUTTON
+# --------------------------------
 audio = mic_recorder(
     start_prompt="🎤 Speak",
-    stop_prompt="Stop Recording",
-    key="recorder"
+    stop_prompt="Stop",
+    key="mic"
 )
 
 if audio:
-    st.info("Voice captured (speech-to-text can be added later).")
+    st.info("Voice captured (speech-to-text optional upgrade).")
 
-# -----------------------------
+# --------------------------------
 # USER INPUT
-# -----------------------------
+# --------------------------------
 if prompt := st.chat_input("Ask Atlas anything..."):
 
     # USER MESSAGE
@@ -106,7 +107,7 @@ if prompt := st.chat_input("Ask Atlas anything..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # ASSISTANT MESSAGE
+    # ASSISTANT RESPONSE
     with st.chat_message("assistant"):
 
         stream = ask_llm(prompt)
