@@ -1,7 +1,3 @@
-install tk
-install SpeechRecognition
-install pyttsx3
-install requests
 streamlit
 requests
 googletrans==4.0.0-rc1
