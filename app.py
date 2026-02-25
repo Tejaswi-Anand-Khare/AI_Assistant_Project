@@ -1,118 +1,135 @@
 import streamlit as st
-import random
-import datetime
-import requests
-import re
-import wikipediaapi
-from deep_translator import GoogleTranslator
+import sqlite3
+from openai import OpenAI
+from streamlit_mic_recorder import mic_recorder
 
-# ------------------------
-# PAGE CONFIG (Dark style)
-# ------------------------
-st.set_page_config(page_title="Atlas AI", page_icon="🤖", layout="centered")
-
-# ------------------------
-# WIKIPEDIA
-# ------------------------
-wiki = wikipediaapi.Wikipedia(
-    user_agent="AtlasAI/1.0",
-    language="en"
+# -----------------------------
+# PAGE CONFIG
+# -----------------------------
+st.set_page_config(
+    page_title="Atlas AI",
+    page_icon="🤖",
+    layout="centered"
 )
 
-def fetch_wikipedia_summary(query):
-    page = wiki.page(query)
-    if page.exists():
-        return page.summary[:400]
-    return "No Wikipedia result found."
+# -----------------------------
+# OPENAI CLIENT
+# -----------------------------
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# ------------------------
-# TOOLS
-# ------------------------
-def fetch_word_meaning(word):
-    url = f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
-    data = requests.get(url).json()
-    if isinstance(data, list):
-        return data[0]["meanings"][0]["definitions"][0]["definition"]
-    return "Meaning not found."
+# -----------------------------
+# DATABASE (PERSISTENT MEMORY)
+# -----------------------------
+conn = sqlite3.connect("memory.db", check_same_thread=False)
+c = conn.cursor()
 
-def translate_text(text, lang):
-    try:
-        return GoogleTranslator(source='auto', target=lang).translate(text)
-    except:
-        return "Translation failed."
+c.execute("""
+CREATE TABLE IF NOT EXISTS chats(
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+role TEXT,
+content TEXT
+)
+""")
+conn.commit()
 
-# ------------------------
-# AI LOGIC
-# ------------------------
-def process_command(command):
-    command = command.lower()
-
-    meaning = re.search(r"meaning of (\w+)", command)
-    if meaning:
-        return fetch_word_meaning(meaning.group(1))
-
-    translate = re.search(r"translate (.+) to (\w+)", command)
-    if translate:
-        return translate_text(translate.group(1), translate.group(2))
-
-    if "time" in command:
-        return datetime.datetime.now().strftime("%I:%M %p")
-
-    if "date" in command:
-        return datetime.datetime.now().strftime("%d %B %Y")
-
-    if "joke" in command:
-        return random.choice([
-            "Why don’t scientists trust atoms? Because they make up everything!",
-            "I told my computer I needed a break, it said no problem — it will go to sleep."
-        ])
-
-    if "wikipedia" in command:
-        query = command.replace("wikipedia", "")
-        return fetch_wikipedia_summary(query)
-
-    return "I didn't understand that yet."
-
-# ------------------------
-# CHAT MEMORY
-# ------------------------
+# -----------------------------
+# LOAD CHAT HISTORY
+# -----------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+    rows = c.execute("SELECT role, content FROM chats").fetchall()
+    for role, content in rows:
+        st.session_state.messages.append(
+            {"role": role, "content": content}
+        )
+
+# -----------------------------
+# SAVE MESSAGE FUNCTION
+# -----------------------------
+def save_message(role, content):
+    c.execute(
+        "INSERT INTO chats (role, content) VALUES (?,?)",
+        (role, content)
+    )
+    conn.commit()
+
+# -----------------------------
+# LLM STREAMING FUNCTION
+# -----------------------------
+def ask_llm(prompt):
+    return client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system",
+             "content": "You are Atlas, a helpful AI assistant."},
+            {"role": "user", "content": prompt}
+        ],
+        stream=True
+    )
+
+# -----------------------------
+# UI TITLE
+# -----------------------------
 st.title("🤖 Atlas AI Assistant")
 
-# ------------------------
-# SHOW CHAT HISTORY
-# ------------------------
+# -----------------------------
+# DISPLAY CHAT HISTORY
+# -----------------------------
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# ------------------------
+# -----------------------------
+# VOICE INPUT
+# -----------------------------
+audio = mic_recorder(
+    start_prompt="🎤 Speak",
+    stop_prompt="Stop Recording",
+    key="recorder"
+)
+
+if audio:
+    st.info("Voice captured (speech-to-text can be added later).")
+
+# -----------------------------
 # USER INPUT
-# ------------------------
+# -----------------------------
 if prompt := st.chat_input("Ask Atlas anything..."):
 
-    # show user
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    # USER MESSAGE
+    st.session_state.messages.append(
+        {"role": "user", "content": prompt}
+    )
+    save_message("user", prompt)
 
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # AI response
-    response = process_command(prompt)
-
-    st.session_state.messages.append(
-        {"role": "assistant", "content": response}
-    )
-
+    # ASSISTANT MESSAGE
     with st.chat_message("assistant"):
-        st.markdown(response)
 
-        # -------- Browser TTS ----------
+        stream = ask_llm(prompt)
+
+        full_response = ""
+        placeholder = st.empty()
+
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content or ""
+            full_response += delta
+            placeholder.markdown(full_response + "▌")
+
+        placeholder.markdown(full_response)
+
+        # Browser TTS
         st.components.v1.html(f"""
         <script>
-        var msg = new SpeechSynthesisUtterance("{response}");
+        var msg = new SpeechSynthesisUtterance({repr(full_response)});
         window.speechSynthesis.speak(msg);
         </script>
         """, height=0)
+
+    st.session_state.messages.append(
+        {"role": "assistant", "content": full_response}
+    )
+    save_message("assistant", full_response)
