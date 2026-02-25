@@ -7,7 +7,7 @@ from streamlit_mic_recorder import mic_recorder
 # PAGE CONFIG
 # --------------------------------
 st.set_page_config(
-    page_title="Atlas AI",
+    page_title="Quagmire",
     page_icon="🤖",
     layout="centered"
 )
@@ -58,12 +58,11 @@ def save_message(role, content):
 # STREAMING LLM
 # --------------------------------
 def ask_llm(prompt):
-
     return client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=[
             {"role": "system",
-             "content": "You are Atlas, a helpful AI assistant."},
+             "content": "You are Quagmire, a helpful AI assistant."},
             {"role": "user", "content": prompt}
         ],
         stream=True
@@ -72,7 +71,7 @@ def ask_llm(prompt):
 # --------------------------------
 # UI TITLE
 # --------------------------------
-st.title("🤖 Atlas AI Assistant")
+st.title("🤖 Quagmire")
 
 # --------------------------------
 # SHOW CHAT HISTORY
@@ -82,7 +81,38 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
 
 # --------------------------------
-# VOICE INPUT BUTTON
+# BROWSER VOICE INPUT (NEW)
+# --------------------------------
+st.markdown("### 🎤 Voice Input")
+
+voice_html = """
+<button onclick="startRecognition()">Start Voice Input</button>
+
+<script>
+function startRecognition() {
+    var recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = 'en-US';
+    recognition.start();
+
+    recognition.onresult = function(event) {
+        const text = event.results[0][0].transcript;
+
+        const streamlitDoc = window.parent.document;
+        const textarea = streamlitDoc.querySelector('textarea');
+
+        if(textarea){
+            textarea.value = text;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    };
+}
+</script>
+"""
+
+st.components.v1.html(voice_html, height=80)
+
+# --------------------------------
+# OPTIONAL MIC RECORDER (kept)
 # --------------------------------
 audio = mic_recorder(
     start_prompt="🎤 Speak",
@@ -91,12 +121,12 @@ audio = mic_recorder(
 )
 
 if audio:
-    st.info("Voice captured (speech-to-text optional upgrade).")
+    st.info("Voice captured.")
 
 # --------------------------------
 # USER INPUT
 # --------------------------------
-if prompt := st.chat_input("Ask Atlas anything..."):
+if prompt := st.chat_input("Ask Quagmire anything..."):
 
     # USER MESSAGE
     st.session_state.messages.append(
@@ -122,7 +152,7 @@ if prompt := st.chat_input("Ask Atlas anything..."):
 
         placeholder.markdown(full_response)
 
-        # Browser TTS
+        # Browser TTS (VOICE OUTPUT)
         st.components.v1.html(f"""
         <script>
         var msg = new SpeechSynthesisUtterance({repr(full_response)});
